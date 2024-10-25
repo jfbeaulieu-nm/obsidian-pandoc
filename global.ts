@@ -1,4 +1,3 @@
-
 import * as fs from 'fs';
 
 export interface PandocPluginSettings {
@@ -30,6 +29,8 @@ export interface PandocPluginSettings {
     extraArguments: string,
     // Export from HTML or from markdown?
     exportFrom: 'html' | 'md',
+    // Ignore content before first h1?
+    ignoreBeforeFirstH1: boolean,
 }
 
 export const DEFAULT_SETTINGS: PandocPluginSettings = {
@@ -46,6 +47,7 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
     outputFolder: null,
     extraArguments: '',
     exportFrom: 'html',
+    ignoreBeforeFirstH1: false,
 }
 
 export function replaceFileExtension(file: string, ext: string): string {

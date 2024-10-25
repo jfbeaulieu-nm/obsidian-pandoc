@@ -1,4 +1,3 @@
-
 /*
  * renderer.ts
  *
@@ -36,6 +35,18 @@ export default async function render (plugin: PandocPlugin, view: MarkdownView,
     // Post-process the HTML in-place
     await postProcessRenderedHTML(plugin, inputFile, wrapper, outputFormat,
         parentFiles, await mermaidCSS(plugin.settings, plugin.vaultBasePath()));
+    
+    // Handle ignoreBeforeFirstH1 setting
+    if (plugin.settings.ignoreBeforeFirstH1) {
+        const firstH1 = wrapper.querySelector('h1');
+        if (firstH1) {
+            // Remove all elements before the first h1
+            while (firstH1.previousSibling) {
+                wrapper.removeChild(firstH1.previousSibling);
+            }
+        }
+    }
+    
     let html = wrapper.innerHTML;
     document.body.removeChild(wrapper);
 

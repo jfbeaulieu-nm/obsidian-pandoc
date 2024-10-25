@@ -1,4 +1,3 @@
-
 /*
  * settings.ts
  *
@@ -114,6 +113,16 @@ export default class PandocPluginSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showCLICommands)
                 .onChange(async (value: boolean) => {
                     this.plugin.settings.showCLICommands = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName("Ignore content before first H1")
+            .setDesc("When enabled, any content before the first H1 heading will be excluded from the export.")
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.ignoreBeforeFirstH1)
+                .onChange(async (value: boolean) => {
+                    this.plugin.settings.ignoreBeforeFirstH1 = value;
                     await this.plugin.saveSettings();
                 }));
 
