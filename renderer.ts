@@ -21,12 +21,96 @@ import { outputFormats } from 'pandoc';
 
 // Note: parentFiles is for internal use (to prevent recursively embedded notes)
 // inputFile must be an absolute file path
+// Function to find the parent header level for a given position in markdown
+function findParentHeaderLevel(markdown: string, position: number): number {
+    const lines = markdown.slice(0, position).split('\n');
+    let highestLevel = 0;
+    
+    for (const line of lines) {
+        const headerMatch = line.match(/^(#{1,6})\s/);
+        if (headerMatch) {
+            const level = headerMatch[1].length;
+            highestLevel = level;
+        }
+    }
+    
+    return highestLevel;
+}
+
+// Function to increment header levels in content
+function incrementHeaders(content: string, baseLevel: number): string {
+    // Don't process if we're already at or beyond maximum header level
+    if (baseLevel >= 6) return content;
+    
+    return content.replace(/^(#{1,6})\s/gm, (match, hashes) => {
+        const currentLevel = hashes.length;
+        const newLevel = Math.min(currentLevel + baseLevel, 6);
+        return '#'.repeat(newLevel) + ' ';
+    });
+}
+
+// Pre-process markdown to handle ![[note]] syntax
+async function preprocessMarkdown(plugin: PandocPlugin, markdown: string, inputFile: string, parentFiles: string[] = []): Promise<string> {
+    const adapter = plugin.app.vault.adapter as FileSystemAdapter;
+    const embedRegex = /!\[\[(.*?)\]\]/g;
+    
+    let result = markdown;
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = embedRegex.exec(markdown)) !== null) {
+        const noteName = match[1];
+        console.log('Found embedded note reference:', noteName);
+        
+        // Find the parent header level at the embed position
+        const parentLevel = findParentHeaderLevel(markdown, match.index);
+        console.log('Parent header level:', parentLevel);
+        
+        // Get the actual file path
+        const subfolder = inputFile.substring(adapter.getBasePath().length);
+        const file = plugin.app.metadataCache.getFirstLinkpathDest(noteName, subfolder);
+        
+        if (file && parentFiles.indexOf(file.path) === -1) {
+            try {
+                // Read the embedded note
+                const embeddedContent = await adapter.read(file.path);
+                
+                // Remove YAML frontmatter if present
+                let processedContent = embeddedContent;
+                if (embeddedContent.trim().startsWith('---')) {
+                    const endFrontmatter = embeddedContent.indexOf('---', 3);
+                    if (endFrontmatter !== -1) {
+                        processedContent = embeddedContent.substring(endFrontmatter + 3).trim();
+                    }
+                }
+                
+                // Increment header levels based on parent level
+                processedContent = incrementHeaders(processedContent, parentLevel);
+                
+                // Replace the ![[note]] with the processed content
+                result = result.replace(match[0], processedContent);
+                
+            } catch (e) {
+                console.error("Failed to process embedded note:", e);
+            }
+        } else if (file) {
+            // Handle recursive embedding by replacing with a link
+            result = result.replace(match[0], `[[${noteName}]]`);
+        }
+        
+        lastIndex = embedRegex.lastIndex;
+    }
+    
+    return result;
+}
+
 export default async function render (plugin: PandocPlugin, view: MarkdownView,
     inputFile: string, outputFormat: string, parentFiles: string[] = []):
     Promise<{ html: string, metadata: { [index: string]: string } }>
 {
-    // Use Obsidian's markdown renderer to render to a hidden <div>
-    const markdown = view.data;
+    // Pre-process markdown to handle embeds
+    const rawMarkdown = view.data;
+    const markdown = await preprocessMarkdown(plugin, rawMarkdown, inputFile, parentFiles);
     const wrapper = document.createElement('div');
     wrapper.style.display = 'hidden';
     document.body.appendChild(wrapper);
@@ -185,8 +269,11 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
     for (let span of Array.from(wrapper.querySelectorAll('span.internal-embed'))) {
         let src = span.getAttribute('src');
         if (src) {
-            const subfolder = inputFile.substring(adapter.getBasePath().length);  // TODO: this is messy
+            console.log('Processing embedded note:', src);
+            const subfolder = inputFile.substring(adapter.getBasePath().length);
+            console.log('Subfolder:', subfolder);
             const file = plugin.app.metadataCache.getFirstLinkpathDest(src, subfolder);
+            console.log('Resolved file:', file?.path);
             try {
                 if (parentFiles.indexOf(file.path) !== -1) {
                     // We've got an infinite recursion on our hands
@@ -197,9 +284,34 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                     const markdown = await adapter.read(file.path);
                     const newParentFiles = [...parentFiles];
                     newParentFiles.push(inputFile);
+
+                    // Remove YAML frontmatter from embedded notes
+                    let processedMarkdown = markdown;
+                    if (markdown.trim().startsWith('---')) {
+                        const endFrontmatter = markdown.indexOf('---', 3);
+                        if (endFrontmatter !== -1) {
+                            processedMarkdown = markdown.substring(endFrontmatter + 3).trim();
+                        }
+                    }
+
                     // TODO: because of this cast, embedded notes won't be able to handle complex plugins (eg DataView)
-                    const html = await render(plugin, { data: markdown } as MarkdownView, file.path, outputFormat, newParentFiles);
-                    span.outerHTML = html.html;
+                    const html = await render(plugin, { data: processedMarkdown } as MarkdownView, file.path, outputFormat, newParentFiles);
+                    
+                    // For non-HTML formats, we want to ensure the content is properly included
+                    if (outputFormat !== 'html') {
+                        // Remove any HTML wrapper if this is an embedded note
+                        let content = html.html;
+                        if (content.startsWith('<!doctype html>')) {
+                            const bodyStart = content.indexOf('<body>');
+                            const bodyEnd = content.indexOf('</body>');
+                            if (bodyStart !== -1 && bodyEnd !== -1) {
+                                content = content.substring(bodyStart + 6, bodyEnd).trim();
+                            }
+                        }
+                        span.outerHTML = content;
+                    } else {
+                        span.outerHTML = html.html;
+                    }
                 }
             } catch (e) {
                 // Continue if it can't be loaded
