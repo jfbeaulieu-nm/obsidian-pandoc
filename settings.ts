@@ -7,6 +7,7 @@
 
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import PandocPlugin from './main';
+import { outputFormats } from './pandoc';
 
 export default class PandocPluginSettingTab extends PluginSettingTab {
     plugin: PandocPlugin;
@@ -150,7 +151,7 @@ export default class PandocPluginSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Extra Pandoc arguments")
-            .setDesc("Add extra command line arguments so you can use templates or bibliographies. Newlines are turned into spaces")
+            .setDesc("Default arguments used when no format-specific arguments are defined")
             .addTextArea(text => text
                 .setPlaceholder('Example: --bibliography "Zotero Exports\My Library.json" or --template letter')
                 .setValue(this.plugin.settings.extraArguments)
@@ -159,5 +160,25 @@ export default class PandocPluginSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 })
                 .inputEl.style.minHeight='150px');
+
+        containerEl.createEl('h3', {text: 'Format-Specific Arguments'});
+        
+        // Add settings for each output format
+        for (const [name, format] of outputFormats) {
+            new Setting(containerEl)
+                .setName(`${name} arguments`)
+                .setDesc(`Extra Pandoc arguments specific to ${name} format. If empty, default arguments will be used.`)
+                .addTextArea(text => text
+                    .setPlaceholder(`Format-specific arguments for ${name}`)
+                    .setValue(this.plugin.settings.formatArguments[format] || '')
+                    .onChange(async (value: string) => {
+                        if (!this.plugin.settings.formatArguments) {
+                            this.plugin.settings.formatArguments = {};
+                        }
+                        this.plugin.settings.formatArguments[format] = value;
+                        await this.plugin.saveSettings();
+                    })
+                    .inputEl.style.minHeight='100px');
+        }
     }
 }

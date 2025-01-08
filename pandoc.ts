@@ -1,4 +1,3 @@
-
 /*
  * pandoc.ts
  *
@@ -97,7 +96,7 @@ export function needsUnicodeStripped(output: PandocOutput): boolean {
 
 // Note: extraParams is a list of strings like ['-o', 'file.md']
 // This rejects if the file doesn't get created
-export const pandoc = async (input: PandocInput, output: PandocOutput, extraParams?: string[])
+export const pandoc = async (input: PandocInput, output: PandocOutput, extraParams?: string[], formatArguments?: { [key: string]: string })
     : Promise<{ result: string, command: string, error: string }> => new Promise(async (resolve, reject) => {
     const stdin = input.file === 'STDIN';
     const stdout = output.file === 'STDOUT';
@@ -128,7 +127,7 @@ export const pandoc = async (input: PandocInput, output: PandocOutput, extraPara
         args.push('-o');
         args.push('-');
     }
-    // // Support Unicode in the PDF output if XeLaTeX is installed
+    // Support Unicode in the PDF output if XeLaTeX is installed
     if (output.format === 'pdf' && await lookpath('xelatex'))
         args.push('--pdf-engine=xelatex');
     if (!stdin) {
@@ -137,8 +136,16 @@ export const pandoc = async (input: PandocInput, output: PandocOutput, extraPara
     // The metadata title is needed for ePub and standalone HTML formats
     // We use a metadata file to avoid being vulnerable to command injection
     if (input.metadataFile) args.push('--metadata-file', input.metadataFile);
-    // Extra parameters
-    if (extraParams) {
+    
+    // Add format-specific arguments if they exist, otherwise use default extra arguments
+    if (output.format && formatArguments && formatArguments[output.format]) {
+        const formatSpecificArgs = formatArguments[output.format]
+            .split('\n')
+            .join(' ')
+            .split(' ')
+            .filter(x => x.length);
+        args.push(...formatSpecificArgs);
+    } else if (extraParams) {
         extraParams = extraParams.flatMap(x => x.split(' ')).filter(x => x.length);
         args.push(...extraParams);
     }

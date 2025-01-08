@@ -1,4 +1,3 @@
-
 /*
  * main.ts
  *
@@ -123,7 +122,8 @@ export default class PandocPlugin extends Plugin {
                                 directory: path.dirname(inputFile),
                             },
                             { file: outputFile, format },
-                            this.settings.extraArguments.split('\n')
+                            this.settings.extraArguments.split('\n'),
+                            this.settings.formatArguments
                         );
                         error = result.error;
                         command = result.command;
@@ -138,7 +138,8 @@ export default class PandocPlugin extends Plugin {
                             directory: path.dirname(inputFile),
                         },
                         { file: outputFile, format },
-                        this.settings.extraArguments.split('\n')
+                        this.settings.extraArguments.split('\n'),
+                        this.settings.formatArguments
                     );
                     error = result.error;
                     command = result.command;
